@@ -1,0 +1,2 @@
+NASA CMAPSS FD001 dataset
+https://www.kaggle.com/datasets/bishals098/nasa-turbofan-engine-degradation-simulation
