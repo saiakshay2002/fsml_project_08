@@ -12,8 +12,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from xgboost import XGBClassifier
-
 CURRENT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = CURRENT_DIR.parent
 if str(ROOT_DIR) not in sys.path:
@@ -82,18 +80,6 @@ def build_models(X_train: pd.DataFrame) -> dict[str, Pipeline]:
         ]),
         "gradient_boosting": Pipeline(common_steps + [
             ("model", GradientBoostingClassifier(random_state=42)),
-        ]),
-        "xgboost": Pipeline(common_steps + [
-            ("model", XGBClassifier(
-                n_estimators=250,
-                max_depth=8,
-                learning_rate=0.1,
-                objective="binary:logistic",
-                use_label_encoder=False,
-                eval_metric="logloss",
-                random_state=42,
-                n_jobs=-1,
-            )),
         ]),
     }
     return models
