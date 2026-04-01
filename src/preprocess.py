@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 
@@ -27,27 +28,6 @@ def add_rul_and_label(df, threshold=30):
     return df
 
 
-def remove_low_variance_features(df):
-    variance = df.var(numeric_only=True)
-    useful_cols = variance[variance > 1e-5].index.tolist()
-
-    if 'label' not in useful_cols:
-        useful_cols.append('label')
-
-    df = df[useful_cols]
-    return df
-
-
-def clean_dataset(df):
-    df = remove_low_variance_features(df)
-
-    df = df.drop(columns=['engine_id', 'cycle', 'max_cycle', 'RUL'], errors='ignore')
-
-    df = df.loc[:, ~df.columns.duplicated()]
-
-    return df
-
-
 def split_by_engine(df):
     engine_ids = df['engine_id'].unique()
 
@@ -58,11 +38,30 @@ def split_by_engine(df):
     val_ids = engine_ids[70:85]
     test_ids = engine_ids[85:]
 
-    train_df = df[df['engine_id'].isin(train_ids)]
-    val_df = df[df['engine_id'].isin(val_ids)]
-    test_df = df[df['engine_id'].isin(test_ids)]
+    train_df = df[df['engine_id'].isin(train_ids)].copy()
+    val_df = df[df['engine_id'].isin(val_ids)].copy()
+    test_df = df[df['engine_id'].isin(test_ids)].copy()
 
     return train_df, val_df, test_df
+
+
+def get_useful_columns(train_df):
+    variance = train_df.var(numeric_only=True)
+    useful_cols = variance[variance > 1e-5].index.tolist()
+
+    required_cols = ['engine_id', 'cycle', 'max_cycle', 'RUL', 'label']
+    for col in required_cols:
+        if col in train_df.columns and col not in useful_cols:
+            useful_cols.append(col)
+
+    return useful_cols
+
+
+def clean_dataset(df, useful_cols):
+    df = df[useful_cols].copy()
+    df = df.drop(columns=['engine_id', 'cycle', 'max_cycle', 'RUL'], errors='ignore')
+    df = df.loc[:, ~df.columns.duplicated()]
+    return df
 
 
 def preprocess_pipeline(path):
@@ -71,13 +70,41 @@ def preprocess_pipeline(path):
 
     train_df, val_df, test_df = split_by_engine(df)
 
-    train_df = clean_dataset(train_df)
-    val_df = clean_dataset(val_df)
-    test_df = clean_dataset(test_df)
+    useful_cols = get_useful_columns(train_df)
+
+    train_df = clean_dataset(train_df, useful_cols)
+    val_df = clean_dataset(val_df, useful_cols)
+    test_df = clean_dataset(test_df, useful_cols)
 
     return train_df, val_df, test_df
 
+
+def save_processed_data(train_df, val_df, test_df, output_dir="data/processed"):
+    os.makedirs(output_dir, exist_ok=True)
+
+    train_path = os.path.join(output_dir, "train.csv")
+    val_path = os.path.join(output_dir, "val.csv")
+    test_path = os.path.join(output_dir, "test.csv")
+
+    train_df.to_csv(train_path, index=False)
+    val_df.to_csv(val_path, index=False)
+    test_df.to_csv(test_path, index=False)
+
+    print(f"Train data saved to: {train_path}")
+    print(f"Validation data saved to: {val_path}")
+    print(f"Test data saved to: {test_path}")
+
+
 if __name__ == "__main__":
-    train_df, val_df, test_df = preprocess_pipeline("train_FD001.txt")
-    print(train_df.shape)
+    raw_data_path = "data/raw/train_FD001.txt"
+
+    train_df, val_df, test_df = preprocess_pipeline(raw_data_path)
+
+    print("Train shape:", train_df.shape)
+    print("Validation shape:", val_df.shape)
+    print("Test shape:", test_df.shape)
+
+    print("\nTrain label distribution:")
     print(train_df['label'].value_counts())
+
+    save_processed_data(train_df, val_df, test_df)
