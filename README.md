@@ -12,6 +12,7 @@ data/raw/train_FD001.txt
 
 ## Project Structure
 
+```text
 fsml_project/
 │── app/
 │   ├── app.py
@@ -44,7 +45,7 @@ fsml_project/
 ├── Dockerfile
 ├── config.yaml
 └── README.md
-
+```
 ---
 
 ## Preprocessing
