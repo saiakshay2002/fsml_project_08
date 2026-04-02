@@ -24,3 +24,12 @@ data/raw/train_FD001.txt
 from src.preprocess import preprocess_pipeline
 
 train_df, val_df, test_df = preprocess_pipeline("data/raw/train_FD001.txt")
+
+## Model Training
+### Models Used
+  Logistic Regression
+  Random Forest
+  Gradient Boosting
+### Run Training
+  cd ./src
+  python train.py
