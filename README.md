@@ -81,3 +81,29 @@ python train.py
 
 ---
 
+### API Deployment (FastAPI)
+
+#### run server:
+```text
+- uvicorn app.app:app --host 127.0.0.1 --port 8000 --reload
+```
+#### test:
+```text
+-http://127.0.0.1:8000/docs (Swagger UI)
+```
+---
+
+#### Full Pipeline
+
+Run everything in one command:
+```python
+python -m pipeline.pipeline
+```
+#### Pipeline Flow :- Raw Data → Preprocessing → Feature Engineering → Training → Evaluation → Model Saving
+---
+
+#### Outputs
+- Processed data → data/processed/
+- Model → models/model_v1.pkl
+- Logs → logs/app.log
+
