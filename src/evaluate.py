@@ -29,5 +29,6 @@ def save_evaluation_report(all_results: dict, report_path: str | Path):
             for split, metrics in split_results.items():
                 f.write(f"\n{split.upper()}:\n")
                 f.write(f"Precision: {metrics['precision']:.4f}\n")
+                f.write(f"Recall: {metrics['recall']:.4f}\n")
                 f.write(f"F1: {metrics['f1']:.4f}\n")
                 f.write(f"Confusion Matrix: {metrics['confusion_matrix']}\n")
