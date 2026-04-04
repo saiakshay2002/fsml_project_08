@@ -8,7 +8,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def load_data(path):
-    df = pd.read_csv(path, sep=" ", header=None)
+    df = pd.read_csv(path, sep="\s+", header=None, engine="python")
     df = df.dropna(axis=1)
 
     df.columns = (
