@@ -3,13 +3,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any
+import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.metrics import precision_score, recall_score
 from xgboost import XGBClassifier
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -20,6 +19,7 @@ if str(ROOT_DIR) not in sys.path:
 from src.data_loader import load_processed_splits, split_features_target
 from src.evaluate import evaluate_classifier, save_evaluation_report
 from src.features import SklearnFeatureEngineer
+from src.preprocess import build_preprocessor
 from src.utils import logger, MODELS_DIR, LOGS_DIR, save_json, save_pickle
 
 
@@ -27,32 +27,30 @@ BEST_MODEL_PATH = MODELS_DIR / "model_v1.pkl"
 METRICS_PATH = LOGS_DIR / "model_metrics.json"
 REPORT_PATH = LOGS_DIR / "evaluation_report.txt"
 FEATURE_NOTE_PATH = LOGS_DIR / "feature_engineering_notes.json"
+THRESHOLD_PATH = LOGS_DIR / "threshold.json"
 
 
-def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    numeric_features = X.select_dtypes(include=["number"]).columns.tolist()
-    categorical_features = [col for col in X.columns if col not in numeric_features]
+# ✅ NEW: threshold optimization
+def find_best_threshold(model, X_val, y_val):
+    probs = model.predict_proba(X_val)[:, 1]
 
-    numeric_transformer = Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),   # missing value handling
-        ("scaler", StandardScaler()),                    # scaling
-    ])
+    best_threshold = 0.5
+    best_precision = 0
 
-    categorical_transformer = Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore")),  # encoding
-    ])
+    for t in np.linspace(0.1, 0.9, 50):
+        preds = (probs >= t).astype(int)
+        recall = recall_score(y_val, preds)
+        precision = precision_score(y_val, preds)
 
-    return ColumnTransformer(
-        transformers=[
-            ("num", numeric_transformer, numeric_features),
-            ("cat", categorical_transformer, categorical_features),
-        ],
-        remainder="drop",
-    )
+        if recall >= 0.90 and precision > best_precision:
+            best_precision = precision
+            best_threshold = t
+
+    return best_threshold
 
 
-def build_models(X_train: pd.DataFrame) -> dict[str, Pipeline]:
+# ✅ MODIFIED: added scale_pos_weight
+def build_models(X_train: pd.DataFrame, scale_pos_weight: float) -> dict[str, Pipeline]:
     preprocessor = build_preprocessor(X_train)
 
     common_steps = [
@@ -84,6 +82,7 @@ def build_models(X_train: pd.DataFrame) -> dict[str, Pipeline]:
                 max_depth=6,
                 learning_rate=0.1,
                 eval_metric="logloss",
+                scale_pos_weight=scale_pos_weight,  # ✅ FIXED
                 random_state=42,
                 n_jobs=-1,
                 verbosity=0,
@@ -95,20 +94,9 @@ def build_models(X_train: pd.DataFrame) -> dict[str, Pipeline]:
 
 def get_feature_documentation() -> dict[str, str]:
     return {
-        "sensor_11_12_gap": (
-            "Difference between sensor_11 and sensor_12. "
-            "This captures divergence between two related sensor responses; "
-            "growing mismatch can indicate abnormal operating behavior."
-        ),
-        "sensor_20_21_ratio": (
-            "Ratio of sensor_20 to sensor_21. "
-            "Relative change is often more informative than absolute values "
-            "when engines operate under varying ranges."
-        ),
-        "sensor_15_squared": (
-            "Squared value of sensor_15 to amplify extreme readings. "
-            "This helps the model respond more strongly to non-linear stress patterns."
-        ),
+        "sensor_11_12_gap": "Difference between sensor_11 and sensor_12.",
+        "sensor_20_21_ratio": "Ratio of sensor_20 to sensor_21.",
+        "sensor_15_squared": "Squared value of sensor_15.",
     }
 
 
@@ -116,15 +104,21 @@ def train_and_select_best_model() -> tuple[str, Pipeline, dict[str, Any]]:
     train_df, val_df, test_df = load_processed_splits()
 
     X_train, y_train = split_features_target(train_df)
+
+    # ✅ imbalance handling
+    pos = sum(y_train == 1)
+    neg = sum(y_train == 0)
+    scale_pos_weight = neg / pos
+
     X_val, y_val = split_features_target(val_df)
     X_test, y_test = split_features_target(test_df)
 
-    models = build_models(X_train)
+    # ✅ pass weight into models
+    models = build_models(X_train, scale_pos_weight)
 
     all_results: dict[str, Any] = {}
     best_name = ""
     best_model: Pipeline | None = None
-    best_val_recall = -1.0
     best_val_f1 = -1.0
 
     for name, pipeline in models.items():
@@ -134,12 +128,6 @@ def train_and_select_best_model() -> tuple[str, Pipeline, dict[str, Any]]:
 
         val_metrics = evaluate_classifier(pipeline, X_val, y_val)
         test_metrics = evaluate_classifier(pipeline, X_test, y_test)
-        logger.info(f"{name} Validation Recall: {val_metrics['recall']}")
-        logger.info(f"{name} Validation F1: {val_metrics['f1']}")
-        logger.info(f"{name} Test Recall: {test_metrics['recall']}")
-        logger.info(f"{name} Test F1: {test_metrics['f1']}")
-        logger.info(f"{name} Validation Accuracy: {val_metrics['accuracy']}")
-        logger.info(f"{name} Test Accuracy: {test_metrics['accuracy']}")
 
         all_results[name] = {
             "validation": val_metrics,
@@ -148,21 +136,25 @@ def train_and_select_best_model() -> tuple[str, Pipeline, dict[str, Any]]:
 
         print(f"Validation Recall: {val_metrics['recall']:.4f}")
         print(f"Validation F1-score: {val_metrics['f1']:.4f}")
-        print(f"Validation Accuracy: {val_metrics['accuracy']:.4f}")
+        print(f"Validation Precision: {val_metrics['precision']:.4f}")
         print(f"Test Recall: {test_metrics['recall']:.4f}")
         print(f"Test F1-score: {test_metrics['f1']:.4f}")
-        print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
+        print(f"Test Precision: {test_metrics['precision']:.4f}")
 
-        if (val_metrics["recall"] > best_val_recall) or (
-            val_metrics["recall"] == best_val_recall and val_metrics["f1"] > best_val_f1
-        ):
-            best_val_recall = val_metrics["recall"]
+        if val_metrics["f1"] > best_val_f1:
             best_val_f1 = val_metrics["f1"]
             best_name = name
             best_model = pipeline
 
     if best_model is None:
         raise RuntimeError("No model was trained successfully.")
+
+    # ✅ NEW: threshold tuning
+    best_threshold = find_best_threshold(best_model, X_val, y_val)
+    print(f"Optimal threshold: {best_threshold:.3f}")
+    logger.info(f"Optimal threshold: {best_threshold:.3f}")
+
+    save_json({"threshold": float(best_threshold)}, THRESHOLD_PATH)
 
     save_pickle(best_model, BEST_MODEL_PATH)
     save_json(all_results, METRICS_PATH)
@@ -175,11 +167,9 @@ def train_and_select_best_model() -> tuple[str, Pipeline, dict[str, Any]]:
 if __name__ == "__main__":
     best_name, _, results = train_and_select_best_model()
     print(f"\nBest model: {best_name}")
-    logger.info(f"Best model selected: {best_name}")
     print(f"Validation Recall: {results[best_name]['validation']['recall']:.4f}")
     print(f"Validation F1: {results[best_name]['validation']['f1']:.4f}")
-    print(f"Validation Accuracy: {results[best_name]['validation']['accuracy']:.4f}")
     print(f"Test Recall: {results[best_name]['test']['recall']:.4f}")
     print(f"Test F1: {results[best_name]['test']['f1']:.4f}")
-    print(f"Test Accuracy: {results[best_name]['test']['accuracy']:.4f}")
+    print(f"Test Precision: {results[best_name]['test']['precision']:.4f}")
     print(f"Saved best model to: {BEST_MODEL_PATH}")
