@@ -75,7 +75,19 @@ fsml_project/
    pip install -r requirements.txt
    ```
 
-4. Download the dataset and place it in `data/raw/train_FD001.txt`
+4. Dataset Handling
+   ```bash
+   The dataset is NOT stored in the repository to keep it lightweight.
+
+   Instead, the dataset is automatically downloaded during pipeline execution from Google Drive.
+
+   - Source: NASA CMAPSS FD001 dataset
+   - Download is handled inside `pipeline/pipeline.py` using `gdown`
+
+   When you run the pipeline, the dataset will be downloaded automatically to:
+
+   data/raw/train_FD001.txt
+   ```
 
 ## Usage
 
