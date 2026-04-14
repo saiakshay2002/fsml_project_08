@@ -2,16 +2,12 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# 🔹 Copy only requirements first (for caching)
-COPY requirements.txt .
+COPY . /app
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 🔹 Copy only necessary folders
-COPY app/ app/
-COPY src/ src/
-COPY pipeline/ pipeline/
-COPY models/ models/
+# 🔥 ensure logs folder exists (important)
+RUN mkdir -p logs
 
 EXPOSE 8000
 
