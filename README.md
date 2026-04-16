@@ -24,7 +24,15 @@ fsml_project_08/
 ├── app/
 │   ├── app.py                    # FastAPI application (API endpoints)
 │   └── schema.py                 # Input validation (Pydantic models)
-│
+|
+├── artifacts/                    # artifacts folder content will be generated
+│   ├── class_distribution.png           
+│   ├── confusion_matrix.png          
+│   ├── full_model_comparison.png            
+│   ├── rul_metrics.png               
+│   ├── rul_vs_cycles.png               
+│   ├── rul_vs_prob.png   
+|
 ├── data/
 │   ├── raw/
 │   │   └── train_FD001.txt       # Raw NASA CMAPSS dataset
